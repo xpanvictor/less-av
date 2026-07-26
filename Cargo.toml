@@ -1,0 +1,8 @@
+# less-av/Cargo.toml
+[workspace]
+resolver = "2"
+members = ["shared", "vcu", "joystick"]
+
+[workspace.dependencies]
+serde = { version = "1", default-features = false, features = ["derive"] }
+serde-json-core = "0.6"

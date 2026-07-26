@@ -1,0 +1,15 @@
+# Rust
+target/
+
+# Python
+__pycache__/
+venv/
+
+# macOS
+.DS_Store
+
+# Broker
+infra/data/
+
+# Secrets
+.env
