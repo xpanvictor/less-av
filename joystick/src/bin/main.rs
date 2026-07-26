@@ -14,9 +14,6 @@ use esp_hal::clock::CpuClock;
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
 
-#[path = "../config.rs"]
-mod config;
-
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
     error!("{}", panic_info);

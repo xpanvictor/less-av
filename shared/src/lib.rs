@@ -141,7 +141,10 @@ impl EstopSource {
         let mut bytes = [0u8; 16];
         let n = s.len().min(16);
         bytes[..n].copy_from_slice(&s.as_bytes()[..n]);
-        Self { bytes, len: n as u8 }
+        Self {
+            bytes,
+            len: n as u8,
+        }
     }
 
     pub fn as_str(&self) -> &str {
@@ -169,7 +172,10 @@ impl<'de> Deserialize<'de> for EstopSource {
                 Ok(EstopSource::new(v))
             }
 
-            fn visit_borrowed_str<E: serde::de::Error>(self, v: &'de str) -> Result<EstopSource, E> {
+            fn visit_borrowed_str<E: serde::de::Error>(
+                self,
+                v: &'de str,
+            ) -> Result<EstopSource, E> {
                 Ok(EstopSource::new(v))
             }
         }

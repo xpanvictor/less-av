@@ -7,15 +7,15 @@
 )]
 #![deny(clippy::large_stack_frames)]
 
-use defmt::{error, info};
+use defmt::error;
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Instant, Timer};
 use esp_hal::clock::CpuClock;
+use esp_hal::gpio::{Level, Output, OutputConfig};
+use esp_hal::rng::Rng;
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
-
-#[path = "../config.rs"]
-mod config;
+use vcu::{heartbeat_led, net, telemetry};
 
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
@@ -35,11 +35,8 @@ esp_bootloader_esp_idf::esp_app_desc!();
 )]
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
-    // generator version: 1.3.0
-    // generator parameters: --chip esp32 -o unstable-hal -o alloc -o wifi -o embassy -o wokwi -o ci -o neovim -o vscode -o defmt
-
-    let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
-    let peripherals = esp_hal::init(config);
+    let hal_config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
+    let peripherals = esp_hal::init(hal_config);
 
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 98768);
 
@@ -48,19 +45,31 @@ async fn main(spawner: Spawner) -> ! {
         esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
 
-    info!("Embassy initialized!");
+    let boot = Instant::now();
 
-    let (mut _wifi_controller, _interfaces) =
-        esp_radio::wifi::new(peripherals.WIFI, Default::default())
-            .expect("Failed to initialize Wi-Fi controller");
+    // GPIO2 == config::PIN_LED_HEARTBEAT.
+    let led = Output::new(peripherals.GPIO2, Level::Low, OutputConfig::default());
+    spawner.spawn(
+        heartbeat_led::heartbeat_led_task(led).expect("heartbeat_led_task spawns exactly once"),
+    );
 
-    // TODO: Spawn some tasks
-    let _ = spawner;
+    let (wifi_controller, interfaces) = esp_radio::wifi::new(peripherals.WIFI, Default::default())
+        .expect("Failed to initialize Wi-Fi controller");
+
+    let rng = Rng::new();
+    let seed = (rng.random() as u64) << 32 | rng.random() as u64;
+    let (stack, runner) = net::wifi::new_stack(interfaces.station, seed);
+
+    spawner.spawn(net::wifi::net_runner_task(runner).expect("net_runner_task spawns exactly once"));
+    spawner.spawn(
+        net::wifi::connection_task(wifi_controller, stack)
+            .expect("connection_task spawns exactly once"),
+    );
+    spawner
+        .spawn(net::transport::transport_task(stack).expect("transport_task spawns exactly once"));
+    spawner.spawn(telemetry::telemetry_task(boot).expect("telemetry_task spawns exactly once"));
 
     loop {
-        info!("Hello world!");
-        Timer::after(Duration::from_secs(1)).await;
+        Timer::after(Duration::from_secs(3600)).await;
     }
-
-    // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.1.0/examples
 }

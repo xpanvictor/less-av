@@ -19,7 +19,7 @@ mode and safety; every other node is an advisor publishing requests.
 | Stage | Deliverable |
 |---|---|
 | **S0** | Workspace, `shared` contract crate, broker config, docs |
-| S1 | VCU connects to WiFi + broker, publishes status/heartbeat |
+| **S1** | VCU connects to WiFi + broker, publishes status/heartbeat |
 | S2 | Servo + motor driven by `cmd/manual` |
 | S3 | Mode arbitration, deadman timeout, latched ESTOP |
 | S4 | Joystick node publishes real input |
@@ -83,3 +83,20 @@ nc -z localhost 9001 && echo "9001 OPEN"
 mosquitto_pub -h localhost -t less/v1/mode/current -m '{"mode":"MANUAL"}' -r
 mosquitto_sub -h localhost -t less/v1/mode/current -C 1
 ```
+
+## Running the VCU (S1)
+
+The VCU speaks native MQTT (v5) directly to the broker over WiFi — no bridge
+process needed. With the broker already running (`./infra/run_broker.sh`) and
+the ESP32 connected over USB:
+
+```sh
+cd vcu
+WIFI_SSID='<your-ssid>' WIFI_PASSWORD='<your-password>' MQTT_BROKER_HOST='<mac-lan-ip>' \
+  cargo run --release
+```
+
+`cargo run` flashes and opens a serial monitor (via `espflash`, configured in
+`vcu/.cargo/config.toml`). Watch for the WiFi connect log, the DHCP-assigned
+IP address, and `mqtt: announced online`. See `docs/PROTOCOL.md` for what's
+published on `less/v1/vcu/status` and `less/v1/vcu/state`.
