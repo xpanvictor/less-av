@@ -1,13 +1,20 @@
 //! Broker connection: connects with a Last Will and Testament, announces
-//! `VcuStatus::Online`, then relays telemetry until the connection drops.
+//! `VcuStatus::Online`, subscribes to `cmd/manual`, then serves both
+//! directions -- inbound commands and outbound telemetry -- until the
+//! connection drops.
 //!
 //! The broker's LWT mechanism -- not this task -- is what announces
 //! `VcuStatus::Offline` on an unclean disconnect (dead socket, power loss).
 //! That is the entire point of registering it at connect time.
+//!
+//! S2 has no safety logic: a decoded, clamped command is applied directly.
+//! There is no deadman timeout yet (S3), so if the broker/network vanishes
+//! without the socket noticing, the last applied command holds indefinitely.
 
 use core::num::NonZero;
 
 use defmt::{info, warn};
+use embassy_futures::select::{Either, select};
 use embassy_net::{Ipv4Address, Stack, tcp::TcpSocket};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
@@ -17,14 +24,17 @@ use rust_mqtt::{
     buffer::AllocBuffer,
     client::{
         Client,
-        options::{ConnectOptions, PublicationOptions, TopicReference, WillOptions},
+        event::Event,
+        options::{
+            ConnectOptions, PublicationOptions, SubscriptionOptions, TopicReference, WillOptions,
+        },
     },
     config::KeepAlive,
-    types::{MqttBinary, MqttString, TopicName},
+    types::{MqttBinary, MqttString, TopicFilter, TopicName},
 };
-use shared::VcuState;
+use shared::{DriveCommand, VcuState};
 
-use crate::{config, net::wifi};
+use crate::{config, control::RAW_CMD, net::wifi};
 
 /// Backoff between broker (re)connect attempts.
 const RECONNECT_BACKOFF: Duration = Duration::from_secs(2);
@@ -51,10 +61,27 @@ fn topic(name: &str) -> TopicName<'_> {
         .expect("topic constants are valid MQTT topic names")
 }
 
+fn topic_filter(name: &str) -> TopicFilter<'_> {
+    TopicFilter::new(MqttString::try_from(name).expect("topic constants are valid MQTT strings"))
+        .expect("topic constants are valid MQTT topic filters")
+}
+
+/// Decodes a `cmd/manual` payload, clamps it, and hands it to
+/// [`crate::control::actuators::actuator_task`]. Must never panic on a
+/// malformed payload -- a bad publish from any client on the LAN is an
+/// expected, not exceptional, occurrence.
+fn dispatch_command(payload: &[u8]) {
+    match shared::decode::<DriveCommand>(payload) {
+        Ok(cmd) => RAW_CMD.signal(cmd.clamped()),
+        Err(_) => warn!("cmd/manual: malformed payload, ignoring"),
+    }
+}
+
 /// Owns the broker connection for the VCU's lifetime: connects (registering
-/// the LWT), announces Online, then publishes every telemetry sample as it
-/// arrives until the connection drops, at which point it retries with
-/// backoff and re-announces Online on the next successful connect.
+/// the LWT), announces Online, subscribes to `cmd/manual`, then serves
+/// inbound commands and outbound telemetry on the same socket until the
+/// connection drops, at which point it retries with backoff and re-announces
+/// Online on the next successful connect.
 #[embassy_executor::task]
 pub async fn transport_task(stack: Stack<'static>) -> ! {
     let broker_addr: Ipv4Address = config::MQTT_BROKER_HOST
@@ -100,9 +127,10 @@ pub async fn transport_task(stack: Stack<'static>) -> ! {
             .expect("MQTT_CLIENT_ID is a valid MQTT string");
 
         let mut buffer = AllocBuffer;
-        // S1 is publish-only: 0 subscriptions, 1 in-flight QoS>=1 publish
-        // (the online announcement below), no subscription identifiers.
-        let mut client = Client::<'_, _, _, 0, 1, 1, 0>::new(&mut buffer);
+        // 1 in-flight SUBSCRIBE (cmd/manual, sent once below), 1 in-flight
+        // QoS>=1 PUBLISH (the online announcement), no subscription
+        // identifiers.
+        let mut client = Client::<'_, _, _, 1, 1, 1, 0>::new(&mut buffer);
 
         if let Err(e) = client
             .connect(socket, &connect_options, Some(client_id))
@@ -128,25 +156,51 @@ pub async fn transport_task(stack: Stack<'static>) -> ! {
         }
         info!("mqtt: announced online");
 
-        loop {
-            let state = TELEMETRY.wait().await;
+        if let Err(e) = client
+            .subscribe(
+                topic_filter(shared::TOPIC_CMD_MANUAL),
+                SubscriptionOptions::new(),
+            )
+            .await
+        {
+            warn!("mqtt: subscribe to cmd/manual failed: {}", e);
+            Timer::after(RECONNECT_BACKOFF).await;
+            continue;
+        }
+        info!("mqtt: subscribed to cmd/manual");
 
+        loop {
             if !wifi::is_up() {
                 warn!("mqtt: wifi down, reconnecting");
                 break;
             }
 
-            let mut payload = [0u8; shared::MAX_PAYLOAD_STATE];
-            let Ok(len) = shared::encode(&state, &mut payload) else {
-                continue; // VcuState always fits MAX_PAYLOAD_STATE; unreachable.
-            };
+            match select(client.poll(), TELEMETRY.wait()).await {
+                Either::First(Ok(Event::Publish(publish))) => {
+                    dispatch_command(publish.message.as_bytes());
+                }
+                Either::First(Ok(_other_event)) => {
+                    // SUBACK, PINGRESP, etc: nothing to do for S2.
+                }
+                Either::First(Err(e)) => {
+                    warn!("mqtt: poll failed, reconnecting: {}", e);
+                    break;
+                }
+                Either::Second(state) => {
+                    let mut payload = [0u8; shared::MAX_PAYLOAD_STATE];
+                    let Ok(len) = shared::encode(&state, &mut payload) else {
+                        continue; // VcuState always fits MAX_PAYLOAD_STATE; unreachable.
+                    };
 
-            let options =
-                PublicationOptions::new(TopicReference::Name(topic(shared::TOPIC_VCU_STATE)));
+                    let options = PublicationOptions::new(TopicReference::Name(topic(
+                        shared::TOPIC_VCU_STATE,
+                    )));
 
-            if let Err(e) = client.publish(&options, Bytes::from(&payload[..len])).await {
-                warn!("mqtt: telemetry publish failed, reconnecting: {}", e);
-                break;
+                    if let Err(e) = client.publish(&options, Bytes::from(&payload[..len])).await {
+                        warn!("mqtt: telemetry publish failed, reconnecting: {}", e);
+                        break;
+                    }
+                }
             }
         }
 

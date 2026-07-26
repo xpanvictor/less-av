@@ -11,11 +11,14 @@ use defmt::error;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Instant, Timer};
 use esp_hal::clock::CpuClock;
-use esp_hal::gpio::{Level, Output, OutputConfig};
+use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
+use esp_hal::ledc::timer::Timer as LedcTimer;
+use esp_hal::ledc::{LSGlobalClkSource, Ledc, LowSpeed};
 use esp_hal::rng::Rng;
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
-use vcu::{heartbeat_led, net, telemetry};
+use static_cell::StaticCell;
+use vcu::{control, drivers, heartbeat_led, net, telemetry};
 
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
@@ -68,6 +71,30 @@ async fn main(spawner: Spawner) -> ! {
     spawner
         .spawn(net::transport::transport_task(stack).expect("transport_task spawns exactly once"));
     spawner.spawn(telemetry::telemetry_task(boot).expect("telemetry_task spawns exactly once"));
+
+    static SERVO_TIMER: StaticCell<LedcTimer<'static, LowSpeed>> = StaticCell::new();
+    static MOTOR_TIMER: StaticCell<LedcTimer<'static, LowSpeed>> = StaticCell::new();
+
+    let mut ledc = Ledc::new(peripherals.LEDC);
+    ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
+
+    let servo_timer = SERVO_TIMER.init(drivers::servo::configure_timer(&ledc));
+    let motor_timer = MOTOR_TIMER.init(drivers::motor::configure_timer(&ledc));
+
+    let servo = drivers::servo::Servo::new(servo_timer, peripherals.GPIO18.degrade());
+    let motors = drivers::motor::Motors::new(
+        motor_timer,
+        peripherals.GPIO19.degrade(),
+        peripherals.GPIO21.degrade(),
+        peripherals.GPIO22.degrade(),
+        peripherals.GPIO23.degrade(),
+        peripherals.GPIO25.degrade(),
+        peripherals.GPIO26.degrade(),
+    );
+    spawner.spawn(
+        control::actuators::actuator_task(servo, motors)
+            .expect("actuator_task spawns exactly once"),
+    );
 
     loop {
         Timer::after(Duration::from_secs(3600)).await;

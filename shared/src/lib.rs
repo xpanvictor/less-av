@@ -81,7 +81,7 @@ impl DriveCommand {
     }
 
     /// Canonical safe state used by every timeout/fault path.
-    pub fn safe() -> Self {
+    pub const fn safe() -> Self {
         Self {
             steer_deg: 0.0,
             throttle: 0.0,
