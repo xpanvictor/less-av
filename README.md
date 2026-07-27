@@ -8,7 +8,7 @@ mode and safety; every other node is an advisor publishing requests.
 | Node | Hardware | Role |
 |---|---|---|
 | **VCU** | ESP32 | Vehicle Control Unit. Owns actuators. Sole authority on mode + safety. |
-| **Joystick** | ESP32 + 2-axis pot + button | Manual drive-by-wire input. |
+| **Joystick** | ESP32-CAM + 2-axis pot | Manual drive-by-wire input. No ESTOP button -- ESTOP is dashboard-only (S5). |
 | **Dashboard** | iPad browser | Manual control + telemetry over MQTT-WebSocket. |
 | **Camera** | ESP32-CAM | MJPEG video stream (S6). |
 | **Autonomy** | Mac Mini (Python) | Publishes autonomous commands (S7). |
@@ -131,3 +131,32 @@ Two independent safety mechanisms stay active once armed:
   an explicit `"assert":false` clear is published. A deadman timeout does
   not clear ESTOP, and clearing ESTOP does not by itself re-select Manual
   mode -- both steps above are required to re-arm after an ESTOP.
+
+## Running the joystick (S4)
+
+The joystick is a second ESP32 (ESP32-CAM board) reading a two-axis
+potentiometer thumbstick and publishing `DriveCommand`s to `less/v1/cmd/manual`
+at 50Hz. It has no knowledge of modes or ESTOP -- it's a pure input publisher;
+the VCU must already be armed (see "Boot and arming" above) for its commands
+to have any effect.
+
+```sh
+cd joystick
+WIFI_SSID='<your-ssid>' WIFI_PASSWORD='<your-password>' MQTT_BROKER_HOST='<mac-lan-ip>' \
+  cargo run --release
+```
+
+**Do not touch the joystick for the first 500ms after power-on.** It
+calibrates its centre position at boot (averaging 100 samples over 500ms) to
+compensate for unit-to-unit variation in the thumbstick's resting voltage --
+touching it during this window skews the calibration and leaves a persistent
+steer/throttle offset at rest. Watch the serial log for
+`Calibration done: center_x=... center_y=...` before handling the stick.
+
+The onboard red LED blinks fast (~4Hz) while WiFi/MQTT is still connecting,
+and slow (~1Hz) once connected -- a visual status without needing the serial
+monitor.
+
+If the physical push directions come out backwards (right push steers left,
+or forward push reverses), flip `INVERT_X`/`INVERT_Y` in
+`joystick/src/config.rs` and rebuild -- see that file for details.

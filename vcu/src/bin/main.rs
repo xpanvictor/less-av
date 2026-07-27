@@ -101,13 +101,14 @@ async fn main(spawner: Spawner) -> ! {
     let rear = drivers::motor::Motors::new(rear_l, rear_r);
 
     // Front motors -- L298N #2 (differential steering).
-    // GPIO4/16/17 == config::PIN_FRONT_L_EN/IN1/IN2.
+    // GPIO4/32/33 == config::PIN_FRONT_L_EN/IN1/IN2. (Not GPIO16/17: not
+    // exposed on this board's header -- see config.rs.)
     let front_l = drivers::motor::MotorChannel::new(
         motor_timer,
         drivers::motor::channel_from_index(config::LEDC_CH_FRONT_L),
         peripherals.GPIO4.degrade(),
-        peripherals.GPIO16.degrade(),
-        peripherals.GPIO17.degrade(),
+        peripherals.GPIO32.degrade(),
+        peripherals.GPIO33.degrade(),
     );
     // GPIO13/14/15 == config::PIN_FRONT_R_EN/IN1/IN2.
     let front_r = drivers::motor::MotorChannel::new(

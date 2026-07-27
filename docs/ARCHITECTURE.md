@@ -5,7 +5,7 @@
 | Node | Hardware | Role |
 |---|---|---|
 | **VCU** | ESP32 | Vehicle Control Unit. Owns actuators. Sole authority on mode + safety. |
-| **Joystick** | ESP32 + 2-axis pot + button | Manual drive-by-wire input. |
+| **Joystick** | ESP32-CAM + 2-axis pot | Manual drive-by-wire input. No ESTOP button -- ESTOP is dashboard-only (S5). |
 | **Dashboard** | iPad browser | Manual control + telemetry over MQTT-WebSocket. |
 | **Camera** | ESP32-CAM | MJPEG video stream (S6). |
 | **Autonomy** | Mac Mini (Python) | Publishes autonomous commands (S7). |

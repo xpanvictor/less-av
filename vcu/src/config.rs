@@ -6,9 +6,12 @@
 /// Not currently wired -- no BEC available yet. See `steering::servo`.
 pub const PIN_SERVO: u8 = 18;
 
-// Board confirmed: ESP32 DevKitC v1, 30-pin, WROOM module (no PSRAM). All
-// four motor pins below (including GPIO16/17) are safe general-purpose
-// outputs on this board; the WROVER/PSRAM caveat from S2.5 doesn't apply.
+// Board confirmed: ESP32 DevKitC v1, 30-pin, WROOM module (no PSRAM). The
+// WROVER/PSRAM caveat from S2.5 doesn't apply. However, GPIO16/17 -- while
+// electrically valid general-purpose pins on the WROOM module itself -- are
+// not physically broken out to the header on this particular board, so they
+// can't be wired to at all. Moved front-left IN1/IN2 to GPIO32/33 instead
+// (see PIN_FRONT_L_IN1/IN2 below).
 
 /// L298N #1 -- rear (drive): equal throttle both sides, always.
 pub const PIN_REAR_L_EN: u8 = 19;
@@ -20,8 +23,10 @@ pub const PIN_REAR_R_IN2: u8 = 26;
 
 /// L298N #2 -- front (differential steering).
 pub const PIN_FRONT_L_EN: u8 = 4;
-pub const PIN_FRONT_L_IN1: u8 = 16;
-pub const PIN_FRONT_L_IN2: u8 = 17;
+/// GPIO16/17 are not exposed on this board's header -- see the board note
+/// above. GPIO32/33 are plain ADC1-capable GPIOs, fine as digital outputs.
+pub const PIN_FRONT_L_IN1: u8 = 32;
+pub const PIN_FRONT_L_IN2: u8 = 33;
 pub const PIN_FRONT_R_EN: u8 = 13;
 pub const PIN_FRONT_R_IN1: u8 = 14;
 /// Strapping pin, but safe as an output here: it only needs to be LOW at
