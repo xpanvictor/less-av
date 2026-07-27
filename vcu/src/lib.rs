@@ -7,4 +7,6 @@ pub mod control;
 pub mod drivers;
 pub mod heartbeat_led;
 pub mod net;
+pub mod state;
+pub mod steering;
 pub mod telemetry;

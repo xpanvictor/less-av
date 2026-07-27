@@ -7,9 +7,11 @@
 )]
 #![deny(clippy::large_stack_frames)]
 
+use alloc::boxed::Box;
+
 use defmt::error;
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Instant, Timer};
+use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
 use esp_hal::gpio::{Level, Output, OutputConfig, Pin};
 use esp_hal::ledc::timer::Timer as LedcTimer;
@@ -18,7 +20,8 @@ use esp_hal::rng::Rng;
 use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
 use static_cell::StaticCell;
-use vcu::{control, drivers, heartbeat_led, net, telemetry};
+use vcu::steering::Steering;
+use vcu::{config, control, drivers, heartbeat_led, net, steering, telemetry};
 
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
@@ -48,8 +51,6 @@ async fn main(spawner: Spawner) -> ! {
         esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
 
-    let boot = Instant::now();
-
     // GPIO2 == config::PIN_LED_HEARTBEAT.
     let led = Output::new(peripherals.GPIO2, Level::Low, OutputConfig::default());
     spawner.spawn(
@@ -70,29 +71,61 @@ async fn main(spawner: Spawner) -> ! {
     );
     spawner
         .spawn(net::transport::transport_task(stack).expect("transport_task spawns exactly once"));
-    spawner.spawn(telemetry::telemetry_task(boot).expect("telemetry_task spawns exactly once"));
+    spawner.spawn(telemetry::telemetry_task().expect("telemetry_task spawns exactly once"));
+    spawner.spawn(control::arbiter::arbiter_task().expect("arbiter_task spawns exactly once"));
 
-    static SERVO_TIMER: StaticCell<LedcTimer<'static, LowSpeed>> = StaticCell::new();
     static MOTOR_TIMER: StaticCell<LedcTimer<'static, LowSpeed>> = StaticCell::new();
 
     let mut ledc = Ledc::new(peripherals.LEDC);
     ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
 
-    let servo_timer = SERVO_TIMER.init(drivers::servo::configure_timer(&ledc));
     let motor_timer = MOTOR_TIMER.init(drivers::motor::configure_timer(&ledc));
 
-    let servo = drivers::servo::Servo::new(servo_timer, peripherals.GPIO18.degrade());
-    let motors = drivers::motor::Motors::new(
+    // Rear motors -- L298N #1 (drive: equal throttle both sides, always).
+    // GPIO19/21/22 == config::PIN_REAR_L_EN/IN1/IN2.
+    let rear_l = drivers::motor::MotorChannel::new(
         motor_timer,
+        drivers::motor::channel_from_index(config::LEDC_CH_REAR_L),
         peripherals.GPIO19.degrade(),
         peripherals.GPIO21.degrade(),
         peripherals.GPIO22.degrade(),
+    );
+    // GPIO23/25/26 == config::PIN_REAR_R_EN/IN1/IN2.
+    let rear_r = drivers::motor::MotorChannel::new(
+        motor_timer,
+        drivers::motor::channel_from_index(config::LEDC_CH_REAR_R),
         peripherals.GPIO23.degrade(),
         peripherals.GPIO25.degrade(),
         peripherals.GPIO26.degrade(),
     );
+    let rear = drivers::motor::Motors::new(rear_l, rear_r);
+
+    // Front motors -- L298N #2 (differential steering).
+    // GPIO4/16/17 == config::PIN_FRONT_L_EN/IN1/IN2.
+    let front_l = drivers::motor::MotorChannel::new(
+        motor_timer,
+        drivers::motor::channel_from_index(config::LEDC_CH_FRONT_L),
+        peripherals.GPIO4.degrade(),
+        peripherals.GPIO16.degrade(),
+        peripherals.GPIO17.degrade(),
+    );
+    // GPIO13/14/15 == config::PIN_FRONT_R_EN/IN1/IN2.
+    let front_r = drivers::motor::MotorChannel::new(
+        motor_timer,
+        drivers::motor::channel_from_index(config::LEDC_CH_FRONT_R),
+        peripherals.GPIO13.degrade(),
+        peripherals.GPIO14.degrade(),
+        peripherals.GPIO15.degrade(),
+    );
+
+    // S2.5 -- differential drive (active now)
+    let active_steering: Box<dyn Steering> =
+        Box::new(steering::DifferentialSteering::new(front_l, front_r));
+    // Future: servo Ackermann (uncomment when BEC wired, comment above)
+    // let active_steering: Box<dyn Steering> = Box::new(steering::ServoSteering::new());
+
     spawner.spawn(
-        control::actuators::actuator_task(servo, motors)
+        control::actuators::actuator_task(rear, active_steering)
             .expect("actuator_task spawns exactly once"),
     );
 

@@ -100,3 +100,34 @@ WIFI_SSID='<your-ssid>' WIFI_PASSWORD='<your-password>' MQTT_BROKER_HOST='<mac-l
 `vcu/.cargo/config.toml`). Watch for the WiFi connect log, the DHCP-assigned
 IP address, and `mqtt: announced online`. See `docs/PROTOCOL.md` for what's
 published on `less/v1/vcu/status` and `less/v1/vcu/state`.
+
+## Boot and arming (S3+)
+
+**The VCU boots ESTOP-latched and in ESTOP mode.** This is intentional and
+correct: the car must not move until an operator explicitly arms it, and a
+power cycle must never be a way to bypass that. `less/v1/cmd/manual` is
+ignored entirely until both of the following have been published:
+
+```sh
+# 1. Clear ESTOP
+mosquitto_pub -h <mac-lan-ip> -t less/v1/estop -r \
+  -m '{"assert":false,"src":"operator"}'
+
+# 2. Request Manual mode
+mosquitto_pub -h <mac-lan-ip> -t less/v1/mode/request \
+  -m '{"mode":"MANUAL"}'
+
+# 3. Drive commands are now accepted
+mosquitto_pub -h <mac-lan-ip> -t less/v1/cmd/manual \
+  -m '{"steer":0.0,"throttle":0.3,"seq":1}'
+```
+
+Two independent safety mechanisms stay active once armed:
+- **Deadman timeout** — if no `cmd/manual` message arrives for
+  `shared::CMD_TIMEOUT_MS` (300ms), the vehicle stops itself. Sending a
+  command again resumes immediately; no re-arm needed.
+- **ESTOP latch** — asserting `less/v1/estop` with `"assert":true` stops the
+  vehicle immediately and *stays* stopped, ignoring all drive commands, until
+  an explicit `"assert":false` clear is published. A deadman timeout does
+  not clear ESTOP, and clearing ESTOP does not by itself re-select Manual
+  mode -- both steps above are required to re-arm after an ESTOP.

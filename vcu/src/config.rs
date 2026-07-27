@@ -3,13 +3,38 @@
 
 // --- Pins ---------------------------------------------------------------
 
+/// Not currently wired -- no BEC available yet. See `steering::servo`.
 pub const PIN_SERVO: u8 = 18;
-pub const PIN_MOTOR_ENA: u8 = 19;
-pub const PIN_MOTOR_IN1: u8 = 21;
-pub const PIN_MOTOR_IN2: u8 = 22;
-pub const PIN_MOTOR_ENB: u8 = 23;
-pub const PIN_MOTOR_IN3: u8 = 25;
-pub const PIN_MOTOR_IN4: u8 = 26;
+
+// Board confirmed: ESP32 DevKitC v1, 30-pin, WROOM module (no PSRAM). All
+// four motor pins below (including GPIO16/17) are safe general-purpose
+// outputs on this board; the WROVER/PSRAM caveat from S2.5 doesn't apply.
+
+/// L298N #1 -- rear (drive): equal throttle both sides, always.
+pub const PIN_REAR_L_EN: u8 = 19;
+pub const PIN_REAR_L_IN1: u8 = 21;
+pub const PIN_REAR_L_IN2: u8 = 22;
+pub const PIN_REAR_R_EN: u8 = 23;
+pub const PIN_REAR_R_IN1: u8 = 25;
+pub const PIN_REAR_R_IN2: u8 = 26;
+
+/// L298N #2 -- front (differential steering).
+pub const PIN_FRONT_L_EN: u8 = 4;
+pub const PIN_FRONT_L_IN1: u8 = 16;
+pub const PIN_FRONT_L_IN2: u8 = 17;
+pub const PIN_FRONT_R_EN: u8 = 13;
+pub const PIN_FRONT_R_IN1: u8 = 14;
+/// Strapping pin, but safe as an output here: it only needs to be LOW at
+/// boot, and an L298N direction input is LOW on power-on/reset by default.
+pub const PIN_FRONT_R_IN2: u8 = 15;
+
+/// LEDC channel assignments -- must not overlap with each other or with any
+/// other LEDC use (currently none; servo is a stub and does not use LEDC).
+pub const LEDC_CH_REAR_L: u8 = 0;
+pub const LEDC_CH_REAR_R: u8 = 1;
+pub const LEDC_CH_FRONT_L: u8 = 2;
+pub const LEDC_CH_FRONT_R: u8 = 3;
+
 pub const PIN_LED_HEARTBEAT: u8 = 2;
 /// Input-only pin. Reserved for a wheel encoder; unused until later.
 pub const PIN_ENCODER_L: u8 = 34;
@@ -23,7 +48,10 @@ pub const SERVO_MIN_US: u32 = 1000;
 pub const SERVO_CENTER_US: u32 = 1500;
 pub const SERVO_MAX_US: u32 = 2000;
 
-pub const MOTOR_PWM_HZ: u32 = 1000;
+pub const MOTOR_PWM_HZ: u32 = 1_000;
+/// Duty-cycle resolution for all four motor LEDC channels. Max duty is
+/// `2^MOTOR_PWM_BITS - 1` = 1023.
+pub const MOTOR_PWM_BITS: u8 = 10;
 
 // --- MQTT -----------------------------------------------------------------
 
