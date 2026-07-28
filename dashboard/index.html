@@ -224,6 +224,17 @@
     display: flex;
     gap: 10px;
   }
+
+  .auto-status {
+    margin-top: 10px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  .auto-status.active {
+    color: var(--success);
+    font-weight: 700;
+  }
   .btn-mode {
     flex: 1 1 0;
     background: transparent;
@@ -324,6 +335,7 @@
         <button class="btn btn-mode" id="manualBtn">MANUAL</button>
         <button class="btn btn-mode" id="autoBtn">AUTO</button>
       </div>
+      <div class="auto-status" id="autoStatus">&#9675; Autonomy node idle</div>
     </div>
   </div>
 
@@ -382,11 +394,18 @@
   'use strict';
 
   const TOPIC_CMD_MANUAL  = 'less/v1/cmd/manual';
+  const TOPIC_CMD_AUTO     = 'less/v1/cmd/auto';
   const TOPIC_MODE_REQUEST = 'less/v1/mode/request';
   const TOPIC_MODE_CURRENT = 'less/v1/mode/current';
   const TOPIC_ESTOP        = 'less/v1/estop';
   const TOPIC_VCU_STATE    = 'less/v1/vcu/state';
   const TOPIC_VCU_STATUS   = 'less/v1/vcu/status';
+
+  // S7.A: an autonomy node is considered "active" if a cmd/auto message
+  // arrived within the last 500ms. Updated in dispatch(), read by a
+  // dedicated interval below (not render(), which only runs on MQTT
+  // messages -- this needs to tick even when the autonomy node goes silent).
+  let lastAutoCmdMs = 0;
 
   const STEER_MAX_DEG = 35.0;
 
@@ -417,6 +436,7 @@
   const estopBtn   = document.getElementById('estopBtn');
   const manualBtn  = document.getElementById('manualBtn');
   const autoBtn    = document.getElementById('autoBtn');
+  const autoStatus = document.getElementById('autoStatus');
 
   const teleSpeed    = document.getElementById('teleSpeed');
   const teleSteer    = document.getElementById('teleSteer');
@@ -458,6 +478,7 @@
       client.subscribe(TOPIC_VCU_STATUS);
       client.subscribe(TOPIC_MODE_CURRENT);
       client.subscribe(TOPIC_ESTOP);
+      client.subscribe(TOPIC_CMD_AUTO);
       updateConnectionBadge('connected');
       render();
     });
@@ -514,6 +535,10 @@
       case TOPIC_ESTOP:
         state.estopLatched = msg.assert;
         break;
+      case TOPIC_CMD_AUTO:
+        lastAutoCmdMs = Date.now();
+        updateAutoStatus();
+        return; // no other state changed; skip the full render()
       default:
         console.warn('unexpected topic', topic);
         return;
@@ -547,7 +572,12 @@
   });
 
   autoBtn.addEventListener('click', () => {
-    publish(TOPIC_MODE_REQUEST, { mode: 'AUTO' }, { qos: 1 });
+    // Same two-step arm as ARM VEHICLE does for MANUAL: clear ESTOP first,
+    // then request the mode, 100ms apart so the VCU processes them in order.
+    publish(TOPIC_ESTOP, { assert: false, src: 'dashboard' }, { retain: true, qos: 1 });
+    setTimeout(() => {
+      publish(TOPIC_MODE_REQUEST, { mode: 'AUTO' }, { qos: 1 });
+    }, 100);
   });
 
   // ---------- Joystick ----------
@@ -755,7 +785,18 @@
     teleEstop.style.color = state.estopLatched ? 'var(--danger)' : 'var(--success)';
   }
 
+  // S7.A: autonomy node is "active" if a cmd/auto message arrived within
+  // the last 500ms. Ticks on its own interval (not just from dispatch())
+  // so it also catches the node going idle when messages stop arriving.
+  function updateAutoStatus() {
+    const active = (Date.now() - lastAutoCmdMs) < 500;
+    autoStatus.textContent = active ? '\u{1F916} Autonomy node running' : '○ Autonomy node idle';
+    autoStatus.classList.toggle('active', active);
+  }
+  setInterval(updateAutoStatus, 500);
+
   render();
+  updateAutoStatus();
 
   // Auto-connect on load using the pre-filled broker IP.
   connect();
