@@ -1,11 +1,766 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>LESS Dashboard</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>LESS Dashboard</title>
+<style>
+  :root {
+    --bg:         #0F172A;
+    --surface:    #1E293B;
+    --border:     #334155;
+    --text:       #E2E8F0;
+    --text-muted: #94A3B8;
+    --accent:     #3B82F6;
+    --danger:     #EF4444;
+    --success:    #10B981;
+    --warning:    #F59E0B;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    overflow-x: hidden;
+    height: 100%;
+  }
+
+  button, input {
+    font-family: inherit;
+  }
+
+  /* ---------- Header ---------- */
+
+  header {
+    min-height: 80px;
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 16px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  @media (max-width: 640px) {
+    header {
+      justify-content: space-between;
+    }
+    .conn-panel {
+      order: 3;
+      flex-basis: 100%;
+    }
+    .conn-panel input[type="text"] {
+      flex: 1 1 auto;
+      width: auto;
+      min-width: 0;
+    }
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 1.1rem;
+    flex: 0 0 auto;
+  }
+
+  .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--danger);
+    flex: 0 0 auto;
+    transition: background-color 0.2s;
+  }
+  .dot.connected { background: var(--success); }
+  .dot.connecting { background: var(--warning); }
+
+  .conn-panel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .conn-panel input[type="text"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 0.9rem;
+    width: 140px;
+    min-width: 90px;
+  }
+
+  .btn-small {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 0.9rem;
+    min-height: 36px;
+    cursor: pointer;
+  }
+  .btn-small:active { opacity: 0.8; }
+
+  .badge {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .badge.status-online   { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+  .badge.status-offline  { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+  .badge.mode-estop  { background: rgba(239, 68, 68, 0.15);  color: var(--danger); }
+  .badge.mode-manual { background: rgba(59, 130, 246, 0.15); color: var(--accent); }
+  .badge.mode-auto   { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+
+  /* ---------- Layout ---------- */
+
+  .layout {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px;
+    min-height: calc(100vh - 80px);
+  }
+
+  @media (max-width: 900px) {
+    .layout { flex-direction: column; }
+  }
+
+  .panel {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .card h2 {
+    margin: 0 0 12px 0;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+
+  /* ---------- Joystick ---------- */
+
+  .joystick-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 12px 0;
+    touch-action: none;
+  }
+
+  #joystick {
+    touch-action: none;
+    user-select: none;
+  }
+
+  /* ---------- Buttons ---------- */
+
+  .btn {
+    display: block;
+    width: 100%;
+    min-height: 56px;
+    border: none;
+    border-radius: 10px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    margin-bottom: 10px;
+  }
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .btn:active:not(:disabled) { transform: translateY(1px); }
+
+  .btn-arm {
+    background: var(--success);
+    color: #052e1e;
+  }
+
+  .btn-estop {
+    background: var(--danger);
+    color: white;
+    font-size: 1.2rem;
+    min-height: 64px;
+  }
+  .btn-estop.latched {
+    animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%   { opacity: 1; }
+    50%  { opacity: 0.7; }
+    100% { opacity: 1; }
+  }
+
+  .mode-row {
+    display: flex;
+    gap: 10px;
+  }
+  .btn-mode {
+    flex: 1 1 0;
+    background: transparent;
+    color: var(--text);
+    border: 2px solid var(--border);
+    min-height: 48px;
+  }
+  .btn-mode.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .btn-mode.active.mode-auto {
+    background: var(--success);
+    border-color: var(--success);
+    color: #052e1e;
+  }
+
+  /* ---------- Telemetry ---------- */
+
+  .telemetry-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .tele-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .tele-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .tele-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .tele-value.link-green  { color: var(--success); }
+  .tele-value.link-yellow { color: var(--warning); }
+  .tele-value.link-red    { color: var(--danger); }
+
+  /* ---------- Camera placeholder ---------- */
+
+  .camera-frame {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: #000;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+  .camera-frame .icon { font-size: 2.5rem; }
+  .camera-frame .label { font-size: 0.95rem; }
+  .camera-frame .sub { font-size: 0.8rem; opacity: 0.7; }
+
+  /* S6: replace this .camera-frame div with:
+     <img src="http://<esp32cam-ip>:81/stream" alt="camera feed" style="width:100%;aspect-ratio:4/3;border-radius:10px;">
+     Safari renders MJPEG directly via <img src="...">, no JS decoder needed
+     (verify still true on the iPadOS version used at demo time). */
+</style>
 </head>
 <body>
-  <h1>LESS — Modular Autonomy Platform</h1>
-  <!-- Implemented in S5: manual control + telemetry over MQTT-WebSocket. -->
+
+<header>
+  <div class="brand"><span class="dot" id="mqttDot"></span> LESS</div>
+  <div class="conn-panel">
+    <input type="text" id="brokerIp" value="172.20.10.2" inputmode="decimal" spellcheck="false" />
+    <button class="btn-small" id="connectBtn">Connect</button>
+  </div>
+  <span class="badge status-offline" id="vcuBadge">VCU: OFFLINE</span>
+  <span class="badge mode-estop" id="modeBadge">ESTOP</span>
+</header>
+
+<div class="layout">
+
+  <div class="panel">
+    <div class="card">
+      <h2>Joystick</h2>
+      <div class="joystick-wrap">
+        <canvas id="joystick" width="280" height="280"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <button class="btn btn-arm" id="armBtn">ARM VEHICLE</button>
+      <button class="btn btn-estop" id="estopBtn">&#11035; ESTOP</button>
+      <div class="mode-row">
+        <button class="btn btn-mode" id="manualBtn">MANUAL</button>
+        <button class="btn btn-mode" id="autoBtn">AUTO</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="card">
+      <h2>Telemetry</h2>
+      <div class="telemetry-grid">
+        <div class="tele-item">
+          <span class="tele-label">Speed (proxy)</span>
+          <span class="tele-value" id="teleSpeed">~0%</span>
+        </div>
+        <div class="tele-item">
+          <span class="tele-label">Steer</span>
+          <span class="tele-value" id="teleSteer">+0.0&deg;</span>
+        </div>
+        <div class="tele-item">
+          <span class="tele-label">Throttle</span>
+          <span class="tele-value" id="teleThrottle">+0.00</span>
+        </div>
+        <div class="tele-item">
+          <span class="tele-label">Link age</span>
+          <span class="tele-value link-red" id="teleLink">-- ms</span>
+        </div>
+        <div class="tele-item">
+          <span class="tele-label">Uptime</span>
+          <span class="tele-value" id="teleUptime">00:00</span>
+        </div>
+        <div class="tele-item">
+          <span class="tele-label">ESTOP</span>
+          <span class="tele-value" id="teleEstop" style="color:var(--danger)">LATCHED</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Camera</h2>
+      <!-- S6: substitute camera stream here -->
+      <div class="camera-frame">
+        <div class="icon">&#128247;</div>
+        <div class="label">Camera feed</div>
+        <div class="sub">Available in S6</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!--
+  MQTT.js from CDN. If the demo venue has no internet, download this file
+  ahead of time, vendor it as dashboard/mqtt.min.js, and change the src
+  below to "mqtt.min.js".
+-->
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const TOPIC_CMD_MANUAL  = 'less/v1/cmd/manual';
+  const TOPIC_MODE_REQUEST = 'less/v1/mode/request';
+  const TOPIC_MODE_CURRENT = 'less/v1/mode/current';
+  const TOPIC_ESTOP        = 'less/v1/estop';
+  const TOPIC_VCU_STATE    = 'less/v1/vcu/state';
+  const TOPIC_VCU_STATUS   = 'less/v1/vcu/status';
+
+  const STEER_MAX_DEG = 35.0;
+
+  // Single state object. Every incoming MQTT message updates this, then
+  // calls render(). All UI reads from here -- easy to inspect in devtools.
+  const state = {
+    mqttConnected: false,
+    vcuOnline:     false,
+    mode:          'ESTOP',
+    estopLatched:  true,
+    steer:         0.0,
+    throttle:      0.0,
+    linkMs:        0,
+    uptimeMs:      0,
+    seq:           0,
+  };
+
+  let client = null;
+
+  // ---------- DOM refs ----------
+
+  const dot        = document.getElementById('mqttDot');
+  const brokerIp   = document.getElementById('brokerIp');
+  const connectBtn = document.getElementById('connectBtn');
+  const vcuBadge   = document.getElementById('vcuBadge');
+  const modeBadge  = document.getElementById('modeBadge');
+  const armBtn     = document.getElementById('armBtn');
+  const estopBtn   = document.getElementById('estopBtn');
+  const manualBtn  = document.getElementById('manualBtn');
+  const autoBtn    = document.getElementById('autoBtn');
+
+  const teleSpeed    = document.getElementById('teleSpeed');
+  const teleSteer    = document.getElementById('teleSteer');
+  const teleThrottle = document.getElementById('teleThrottle');
+  const teleLink     = document.getElementById('teleLink');
+  const teleUptime   = document.getElementById('teleUptime');
+  const teleEstop    = document.getElementById('teleEstop');
+
+  // ---------- MQTT ----------
+
+  function updateConnectionBadge(kind) {
+    dot.classList.remove('connected', 'connecting');
+    if (kind === 'connected') dot.classList.add('connected');
+    else if (kind === 'connecting') dot.classList.add('connecting');
+  }
+
+  function connect() {
+    if (client) {
+      client.end(true);
+      client = null;
+    }
+
+    const ip = brokerIp.value.trim();
+    if (!ip) return;
+
+    updateConnectionBadge('connecting');
+
+    client = mqtt.connect(`ws://${ip}:9001`, {
+      clientId: 'less-dashboard-' + Math.random().toString(16).slice(2, 8),
+      keepalive: 30,
+      clean: true,
+      reconnectPeriod: 2000,
+      // No LWT -- dashboard disconnecting is not a safety event.
+    });
+
+    client.on('connect', () => {
+      state.mqttConnected = true;
+      client.subscribe(TOPIC_VCU_STATE);
+      client.subscribe(TOPIC_VCU_STATUS);
+      client.subscribe(TOPIC_MODE_CURRENT);
+      client.subscribe(TOPIC_ESTOP);
+      updateConnectionBadge('connected');
+      render();
+    });
+
+    client.on('reconnect', () => updateConnectionBadge('connecting'));
+
+    client.on('offline', () => {
+      state.mqttConnected = false;
+      updateConnectionBadge('disconnected');
+      render();
+    });
+
+    client.on('close', () => {
+      state.mqttConnected = false;
+      updateConnectionBadge('disconnected');
+      render();
+    });
+
+    client.on('error', (err) => {
+      console.error('mqtt error', err);
+    });
+
+    client.on('message', (topic, payload) => dispatch(topic, payload));
+  }
+
+  function dispatch(topic, payload) {
+    let msg;
+    try {
+      msg = JSON.parse(payload.toString());
+    } catch (e) {
+      // The VCU may occasionally send a partial message during reconnection.
+      console.warn('failed to parse MQTT payload on', topic, e);
+      return;
+    }
+
+    switch (topic) {
+      case TOPIC_VCU_STATE:
+        state.vcuOnline = true;
+        state.steer = msg.steer;
+        state.throttle = msg.throttle;
+        state.mode = msg.mode;
+        state.estopLatched = msg.estop;
+        state.linkMs = msg.link_ms;
+        state.uptimeMs = msg.uptime_ms;
+        state.seq = msg.seq;
+        break;
+      case TOPIC_VCU_STATUS:
+        // Payload is a bare JSON string: "online" or "offline".
+        state.vcuOnline = (msg === 'online');
+        break;
+      case TOPIC_MODE_CURRENT:
+        state.mode = msg.mode;
+        break;
+      case TOPIC_ESTOP:
+        state.estopLatched = msg.assert;
+        break;
+      default:
+        console.warn('unexpected topic', topic);
+        return;
+    }
+
+    render();
+  }
+
+  function publish(topic, obj, opts) {
+    if (!client || !state.mqttConnected) return;
+    client.publish(topic, JSON.stringify(obj), opts || {});
+  }
+
+  // ---------- Controls ----------
+
+  connectBtn.addEventListener('click', connect);
+
+  armBtn.addEventListener('click', () => {
+    publish(TOPIC_ESTOP, { assert: false, src: 'dashboard' }, { retain: true, qos: 1 });
+    setTimeout(() => {
+      publish(TOPIC_MODE_REQUEST, { mode: 'MANUAL' }, { qos: 1 });
+    }, 100);
+  });
+
+  estopBtn.addEventListener('click', () => {
+    publish(TOPIC_ESTOP, { assert: true, src: 'dashboard' }, { retain: true, qos: 1 });
+  });
+
+  manualBtn.addEventListener('click', () => {
+    publish(TOPIC_MODE_REQUEST, { mode: 'MANUAL' }, { qos: 1 });
+  });
+
+  autoBtn.addEventListener('click', () => {
+    publish(TOPIC_MODE_REQUEST, { mode: 'AUTO' }, { qos: 1 });
+  });
+
+  // ---------- Joystick ----------
+
+  const canvas = document.getElementById('joystick');
+  const ctx = canvas.getContext('2d');
+
+  const CANVAS_SIZE = 280;
+  const OUTER_RADIUS = 130;
+  const KNOB_RADIUS = 50;
+  const CENTER = CANVAS_SIZE / 2;
+
+  let knobX = CENTER;
+  let knobY = CENTER;
+  let touchActive = false;
+  let joySteer = 0.0;
+  let joyThrottle = 0.0;
+  let joySeq = 0;
+
+  function knobColor() {
+    if (!state.mqttConnected) return '#6B7280';
+    if (state.estopLatched) return '#EF4444';
+    if (state.mode === 'MANUAL') return '#3B82F6';
+    if (state.mode === 'AUTO') return '#10B981';
+    return '#EF4444'; // ESTOP mode or unknown
+  }
+
+  function drawJoystick() {
+    ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+    // Outer ring.
+    ctx.beginPath();
+    ctx.arc(CENTER, CENTER, OUTER_RADIUS, 0, Math.PI * 2);
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Crosshair.
+    ctx.beginPath();
+    ctx.moveTo(CENTER - 12, CENTER);
+    ctx.lineTo(CENTER + 12, CENTER);
+    ctx.moveTo(CENTER, CENTER - 12);
+    ctx.lineTo(CENTER, CENTER + 12);
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Knob.
+    ctx.beginPath();
+    ctx.arc(knobX, knobY, KNOB_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = knobColor();
+    ctx.fill();
+
+    requestAnimationFrame(drawJoystick);
+  }
+  requestAnimationFrame(drawJoystick);
+
+  function clampToRing(dx, dy) {
+    const dist = Math.hypot(dx, dy);
+    const maxDist = OUTER_RADIUS;
+    if (dist <= maxDist) return { dx, dy };
+    const scale = maxDist / dist;
+    return { dx: dx * scale, dy: dy * scale };
+  }
+
+  function setKnobFromPointer(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = CANVAS_SIZE / rect.width;
+    const scaleY = CANVAS_SIZE / rect.height;
+    const px = (clientX - rect.left) * scaleX;
+    const py = (clientY - rect.top) * scaleY;
+
+    const raw = clampToRing(px - CENTER, py - CENTER);
+    knobX = CENTER + raw.dx;
+    knobY = CENTER + raw.dy;
+
+    joySteer = Math.max(-1, Math.min(1, raw.dx / OUTER_RADIUS)) * STEER_MAX_DEG;
+    joyThrottle = Math.max(-1, Math.min(1, -(raw.dy / OUTER_RADIUS)));
+  }
+
+  function resetKnob() {
+    knobX = CENTER;
+    knobY = CENTER;
+    joySteer = 0.0;
+    joyThrottle = 0.0;
+  }
+
+  function onStart(clientX, clientY) {
+    if (state.estopLatched) return; // frozen -- does not respond to touch
+    touchActive = true;
+    setKnobFromPointer(clientX, clientY);
+  }
+  function onMove(clientX, clientY) {
+    if (!touchActive) return;
+    if (state.estopLatched) return;
+    setKnobFromPointer(clientX, clientY);
+  }
+  function onEnd() {
+    touchActive = false;
+    resetKnob();
+  }
+
+  canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const t = e.touches[0];
+    onStart(t.clientX, t.clientY);
+  }, { passive: false });
+  canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const t = e.touches[0];
+    onMove(t.clientX, t.clientY);
+  }, { passive: false });
+  canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    onEnd();
+  }, { passive: false });
+  canvas.addEventListener('touchcancel', (e) => {
+    e.preventDefault();
+    onEnd();
+  }, { passive: false });
+
+  let mouseDown = false;
+  canvas.addEventListener('mousedown', (e) => {
+    mouseDown = true;
+    onStart(e.clientX, e.clientY);
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!mouseDown) return;
+    onMove(e.clientX, e.clientY);
+  });
+  window.addEventListener('mouseup', () => {
+    if (!mouseDown) return;
+    mouseDown = false;
+    onEnd();
+  });
+
+  // Publish loop: 20Hz while a touch is active. On release, one final
+  // zero command, then stop. JS timers aren't precise enough (and tabs get
+  // throttled) for 50Hz, and the VCU's 300ms deadman gives plenty of margin
+  // at 20Hz (6 commands per deadman window).
+  let wasActive = false;
+  setInterval(() => {
+    const idle = !touchActive && joySteer === 0 && joyThrottle === 0;
+    if (idle && !wasActive) return;
+
+    publish(TOPIC_CMD_MANUAL, {
+      steer: Number(joySteer.toFixed(2)),
+      throttle: Number(joyThrottle.toFixed(3)),
+      seq: joySeq++,
+    });
+
+    wasActive = touchActive;
+  }, 50);
+
+  // ---------- Render ----------
+
+  function formatUptime(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const mm = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+    const ss = (totalSeconds % 60).toString().padStart(2, '0');
+    return `${mm}:${ss}`;
+  }
+
+  function modeClass(mode) {
+    if (mode === 'MANUAL') return 'mode-manual';
+    if (mode === 'AUTO') return 'mode-auto';
+    return 'mode-estop';
+  }
+
+  function render() {
+    // Header.
+    vcuBadge.textContent = state.vcuOnline ? 'VCU: ONLINE' : 'VCU: OFFLINE';
+    vcuBadge.className = 'badge ' + (state.vcuOnline ? 'status-online' : 'status-offline');
+
+    modeBadge.textContent = state.mode;
+    modeBadge.className = 'badge ' + modeClass(state.mode);
+
+    // ARM button: disabled if not connected, VCU offline, or already armed.
+    const alreadyArmed = state.mode === 'MANUAL' || state.mode === 'AUTO';
+    armBtn.disabled = !state.mqttConnected || !state.vcuOnline || alreadyArmed;
+
+    // ESTOP: always enabled whenever MQTT is connected.
+    estopBtn.disabled = !state.mqttConnected;
+    estopBtn.classList.toggle('latched', !!state.estopLatched);
+
+    // Mode buttons.
+    manualBtn.classList.toggle('active', state.mode === 'MANUAL');
+    autoBtn.classList.toggle('active', state.mode === 'AUTO');
+    autoBtn.classList.add('mode-auto');
+
+    // Telemetry.
+    teleSpeed.textContent = `~${Math.round(Math.abs(state.throttle) * 100)}%`;
+    teleSteer.textContent = (state.steer >= 0 ? '+' : '') + state.steer.toFixed(1) + '°';
+    teleThrottle.textContent = (state.throttle >= 0 ? '+' : '') + state.throttle.toFixed(2);
+
+    teleLink.textContent = `${state.linkMs} ms`;
+    teleLink.classList.remove('link-green', 'link-yellow', 'link-red');
+    if (state.linkMs < 150) teleLink.classList.add('link-green');
+    else if (state.linkMs <= 300) teleLink.classList.add('link-yellow');
+    else teleLink.classList.add('link-red');
+
+    teleUptime.textContent = formatUptime(state.uptimeMs);
+
+    teleEstop.textContent = state.estopLatched ? 'LATCHED' : 'CLEAR';
+    teleEstop.style.color = state.estopLatched ? 'var(--danger)' : 'var(--success)';
+  }
+
+  render();
+
+  // Auto-connect on load using the pre-filled broker IP.
+  connect();
+})();
+</script>
+
 </body>
 </html>
