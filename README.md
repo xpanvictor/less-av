@@ -5,27 +5,27 @@ chassis) that proves an end-to-end autonomy control path across five nodes and
 one MQTT broker, all on the same WiFi LAN. The VCU is the sole authority on
 mode and safety; every other node is an advisor publishing requests.
 
-| Node | Hardware | Role |
-|---|---|---|
-| **VCU** | ESP32 | Vehicle Control Unit. Owns actuators. Sole authority on mode + safety. |
-| **Joystick** | ESP32-CAM + 2-axis pot | Manual drive-by-wire input. No ESTOP button -- ESTOP is dashboard-only (S5). |
-| **Dashboard** | iPad browser | Manual control + telemetry over MQTT-WebSocket. |
-| **Camera** | ESP32-CAM | MJPEG video stream (S6). |
-| **Autonomy** | Mac Mini (Python) | Publishes autonomous commands (S7). |
-| **Broker** | Mac Mini (Mosquitto) | MQTT backbone, ports 1883 + 9001. |
+| Node          | Hardware               | Role                                                                         |
+| ------------- | ---------------------- | ---------------------------------------------------------------------------- |
+| **VCU**       | ESP32                  | Vehicle Control Unit. Owns actuators. Sole authority on mode + safety.       |
+| **Joystick**  | ESP32-CAM + 2-axis pot | Manual drive-by-wire input. No ESTOP button -- ESTOP is dashboard-only (S5). |
+| **Dashboard** | iPad browser           | Manual control + telemetry over MQTT-WebSocket.                              |
+| **Camera**    | ESP32-CAM              | MJPEG video stream (S6).                                                     |
+| **Autonomy**  | Mac Mini (Python)      | Publishes autonomous commands (S7).                                          |
+| **Broker**    | Mac Mini (Mosquitto)   | MQTT backbone, ports 1883 + 9001.                                            |
 
 ## Staging map
 
-| Stage | Deliverable |
-|---|---|
-| **S0** | Workspace, `shared` contract crate, broker config, docs |
+| Stage  | Deliverable                                               |
+| ------ | --------------------------------------------------------- |
+| **S0** | Workspace, `shared` contract crate, broker config, docs   |
 | **S1** | VCU connects to WiFi + broker, publishes status/heartbeat |
-| S2 | Servo + motor driven by `cmd/manual` |
-| S3 | Mode arbitration, deadman timeout, latched ESTOP |
-| S4 | Joystick node publishes real input |
-| S5 | iPad dashboard |
-| S6 | ESP32-CAM MJPEG stream |
-| S7 | Autonomy node closes the loop |
+| S2     | Servo + motor driven by `cmd/manual`                      |
+| S3     | Mode arbitration, deadman timeout, latched ESTOP          |
+| S4     | Joystick node publishes real input                        |
+| S5     | iPad dashboard                                            |
+| S6     | ESP32-CAM MJPEG stream                                    |
+| S7     | Autonomy node closes the loop                             |
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PROTOCOL.md](docs/PROTOCOL.md),
 and [docs/HARDWARE.md](docs/HARDWARE.md) for details.
@@ -92,7 +92,7 @@ the ESP32 connected over USB:
 
 ```sh
 cd vcu
-WIFI_SSID='<your-ssid>' WIFI_PASSWORD='<your-password>' MQTT_BROKER_HOST='<mac-lan-ip>' \
+WIFI_SSID='X' WIFI_PASSWORD='passwords' MQTT_BROKER_HOST='192...' \
   cargo run --release
 ```
 
@@ -123,11 +123,12 @@ mosquitto_pub -h <mac-lan-ip> -t less/v1/cmd/manual \
 ```
 
 Two independent safety mechanisms stay active once armed:
+
 - **Deadman timeout** — if no `cmd/manual` message arrives for
   `shared::CMD_TIMEOUT_MS` (300ms), the vehicle stops itself. Sending a
   command again resumes immediately; no re-arm needed.
 - **ESTOP latch** — asserting `less/v1/estop` with `"assert":true` stops the
-  vehicle immediately and *stays* stopped, ignoring all drive commands, until
+  vehicle immediately and _stays_ stopped, ignoring all drive commands, until
   an explicit `"assert":false` clear is published. A deadman timeout does
   not clear ESTOP, and clearing ESTOP does not by itself re-select Manual
   mode -- both steps above are required to re-arm after an ESTOP.
